@@ -44,14 +44,18 @@ class TextAnalyzer(
     private val imageCropPercentages: MutableLiveData<Pair<Int, Int>>
 ) : ImageAnalysis.Analyzer {
 
-    // TODO: Instantiate TextRecognition detector
+    private val detector = TextRecognition.getClient()
+    // Flag to skip analyzing new available frames until previous analysis has finished.
+    private var isBusy = false
 
     // TODO: Add lifecycle observer to properly close ML Kit detectors
 
     @androidx.camera.core.ExperimentalGetImage
     override fun analyze(imageProxy: ImageProxy) {
         val mediaImage = imageProxy.image ?: return
+        if (isBusy) return
 
+        isBusy = true
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
 
         // We requested a setTargetAspectRatio, but it's not guaranteed that's what the camera
@@ -94,11 +98,11 @@ class TextAnalyzer(
         val croppedBitmap =
             ImageUtils.rotateAndCrop(convertImageToBitmap, rotationDegrees, cropRect)
 
-        // TODO call recognizeText() once implemented
-    }
-
-    fun recognizeText() {
-        // TODO Use ML Kit's TextRecognition to analyze frames from the camera live feed.
+        recognizeTextOnDevice(InputImage.fromBitmap(croppedBitmap, 0))
+            .addOnCompleteListener {
+                isBusy = false
+                imageProxy.close()
+            }
     }
 
     private fun getErrorMessage(exception: Exception): String? {
@@ -106,6 +110,25 @@ class TextAnalyzer(
         return if (mlKitException.errorCode == MlKitException.UNAVAILABLE) {
             "Waiting for text recognition model to be downloaded"
         } else exception.message
+    }
+
+    private fun recognizeTextOnDevice(
+        image: InputImage
+    ): Task<Text> {
+        // Pass image to an ML Kit Vision API
+        return detector.process(image)
+            .addOnSuccessListener { visionText ->
+                // Task completed successfully
+                result.value = visionText.text
+            }
+            .addOnFailureListener { exception ->
+                // Task failed with an exception
+                Log.e(TAG, "Text recognition error", exception)
+                val message = getErrorMessage(exception)
+                message?.let {
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                }
+            }
     }
 
     companion object {
