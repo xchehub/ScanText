@@ -45,10 +45,14 @@ class TextAnalyzer(
 ) : ImageAnalysis.Analyzer {
 
     private val detector = TextRecognition.getClient()
+//    private val detector = TextRecognition.getClient(
+//        TextRecognizerOptions.Builder().setExecutor(executor).build())
     // Flag to skip analyzing new available frames until previous analysis has finished.
     private var isBusy = false
 
-    // TODO: Add lifecycle observer to properly close ML Kit detectors
+    init {
+        lifecycle.addObserver(detector)
+    }
 
     @androidx.camera.core.ExperimentalGetImage
     override fun analyze(imageProxy: ImageProxy) {
